@@ -1,0 +1,67 @@
+# ClusterRole to allow deleting ClusterRoles
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "helm-hooks-demo.fullname" . }}-post-delete
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+rules:
+- apiGroups: 
+  - "rbac.authorization.k8s.io"
+  - ""
+  resources: ["clusterroles", "namespaces"]
+  verbs: ["delete", "get", "list", "update", "patch", "watch"]
+---
+# ServiceAccount for the job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "helm-hooks-demo.serviceAccountName" . }}-post-delete
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "-8"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+---
+# ClusterRoleBinding to bind the helm-hooks-demo ClusterRole to the job's ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "helm-hooks-demo.fullname" . }}-post-delete
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "helm-hooks-demo.fullname" . }}-post-delete
+subjects:
+- kind: ServiceAccount
+  name: {{ include "helm-hooks-demo.serviceAccountName" . }}-post-delete
+  namespace: helm-hooks-demo
+---
+# Post-delete job to delete the kyverno:watch-update-namespaces ClusterRole and remove labels dgxc/system-namespace
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "delete-clusterrole"
+  annotations:
+    "helm.sh/hook": post-delete
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  template:
+    spec:
+      serviceAccountName: {{ include "helm-hooks-demo.serviceAccountName" . }}-post-delete
+      containers:
+      - name: delete-clusterrole
+        image: "bitnami/kubectl:latest"
+        command: ["/bin/bash", "-c"]
+        args:
+        - |
+          kubectl delete clusterrole update-namespaces
+      restartPolicy: Never
+  backoffLimit: 4
+---

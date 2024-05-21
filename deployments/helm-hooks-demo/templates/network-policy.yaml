@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all-traffic
+  namespace: default
+  labels:
+spec:
+  
+  podSelector: {}
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          test1: "true"
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          test1: "true"
+  policyTypes:
+  - Ingress
+  - Egress

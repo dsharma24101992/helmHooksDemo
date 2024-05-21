@@ -1,0 +1,80 @@
+# ClusterRole to allow deleting ClusterRoles
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "helm-hooks-demo.fullname" . }}-pre-install
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "-10"
+rules:
+- apiGroups: 
+  - "rbac.authorization.k8s.io"
+  - ""
+  resources: ["clusterroles", "namespaces"]
+  verbs: ["delete", "get", "list", "update", "patch", "watch", "create"]
+---
+# ServiceAccount for the job
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "helm-hooks-demo.serviceAccountName" . }}-pre-install
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "-8"
+---
+# ClusterRoleBinding to bind the helm-hooks-demo ClusterRole to the job's ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "helm-hooks-demo.fullname" . }}-pre-install
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-weight": "-5"
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "helm-hooks-demo.fullname" . }}-pre-install
+subjects:
+- kind: ServiceAccount
+  name: {{ include "helm-hooks-demo.serviceAccountName" . }}-pre-install
+  namespace: helm-hooks-demo
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "helm-hooks-demo-create-clusterrole-pre-install-job"
+  annotations:
+    "helm.sh/hook": pre-install
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": "hook-succeeded"
+spec:
+  template:
+    spec:
+      serviceAccountName: {{ include "helm-hooks-demo.serviceAccountName" . }}-pre-install
+      containers:
+      - name: pre-install-job
+        image:  "bitnami/kubectl:latest"
+        command:
+        - /bin/sh
+        - -c
+        - |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: update-namespaces
+            labels:
+                {{- include "helm-hooks-demo.labels" . | nindent 16 }}
+          rules:
+            - apiGroups:
+              - ""
+              resources:
+                - namespaces
+              verbs: ["get", "watch", "list", "patch", "update"]
+          EOF
+      restartPolicy: Never
+  backoffLimit: 4
+
